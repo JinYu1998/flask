@@ -822,10 +822,7 @@ def insert_anki_card(conn, deck_id, model_id, question, timestamp):
 init_db()
 
 
-@app.route("/")
-def index():
-    return "Hello CloudBase"
-    
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
