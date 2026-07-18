@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set title = "从Json 导入" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">JSON</p>
+    <h1>从Json 导入</h1>
+  </div>
+  <a class="button subtle" href="{{ url_for('index') }}">返回录入</a>
+</section>
+
+{% if not imported %}
+  <form class="editor import-uploader" action="{{ url_for('import_json') }}" method="post" enctype="multipart/form-data">
+    <label>
+      <span>选择本地 JSON 文件</span>
+      <input type="file" name="json_file" accept="application/json,.json" required>
+    </label>
+    <div class="actions">
+      <button class="button primary" type="submit">读取并预览</button>
+    </div>
+  </form>
+{% else %}
+  <form class="import-list js-export-form" action="{{ url_for('import_json') }}" method="post" data-default-deck="JSON导入题目">
+    <input type="hidden" name="deck_name" value="">
+    {% for item in imported %}
+      <article class="question-card import-card">
+        <div class="question-meta">
+          <span>#{{ item.get("题号", loop.index) }}</span>
+          {% if item.get("标签") %}
+            <span class="tag-line">{{ item.get("标签") }}</span>
+          {% endif %}
+        </div>
+        {% for image in item.get("图片", []) %}
+          <img class="attachment" src="{{ image }}" alt="题目图片">
+        {% endfor %}
+        <div class="rendered">{{ item.get("题目", "")|md|safe }}</div>
+        <div class="options">
+          <div><b>A</b><span>{{ item.get("A", "")|md|safe }}</span></div>
+          <div><b>B</b><span>{{ item.get("B", "")|md|safe }}</span></div>
+          <div><b>C</b><span>{{ item.get("C", "")|md|safe }}</span></div>
+          <div><b>D</b><span>{{ item.get("D", "")|md|safe }}</span></div>
+        </div>
+        <p class="answer-line">答案：{{ item.get("答案", "未标注") }}</p>
+        <label class="wide">
+          <span>手写解析（支持 Markdown）</span>
+          <textarea name="explanation" rows="6" placeholder="在这里写解析、公式、易错点……" required></textarea>
+        </label>
+        <input type="hidden" name="item_json" value='{{ item|tojson }}'>
+      </article>
+    {% endfor %}
+    <div class="sticky-actions">
+      <span>共 {{ imported|length }} 道题，补完解析后直接导出，不会加入今日页面。</span>
+      <button class="button primary" type="submit">导出 Anki 包</button>
+    </div>
+  </form>
+{% endif %}
+{% endblock %}

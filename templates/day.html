@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set title = ("今日题目" if is_today else day|day_label ~ "题目") %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ day|day_label }}</p>
+    <h1>{{ "今天记录的题目" if is_today else "历史题目" }}</h1>
+  </div>
+  <div class="head-actions">
+    <a class="button primary js-export-anki" href="{{ url_for('export_day', day=day) }}" data-default-deck="数量关系题目::{{ day|day_label }}">导出 Anki 包</a>
+    {% if not is_today %}
+      <a class="button subtle" href="{{ url_for('history') }}">返回历史</a>
+    {% endif %}
+  </div>
+</section>
+
+{% if questions %}
+  <div class="count-bar">
+    <span>共 {{ questions|length }} 道题</span>
+    <span>导出默认牌组名：{{ day|day_label }}</span>
+  </div>
+  <div class="question-list">
+    {% for q in questions %}
+      {% set display_no = loop.index %}
+      {% include "_question_card.html" %}
+    {% endfor %}
+  </div>
+{% else %}
+  <section class="empty">
+    <h2>还没有题目</h2>
+    <p>今天录入后，这里会自动汇总，并可直接导出 Anki 包。</p>
+    <a class="button primary" href="{{ url_for('index') }}">去录入</a>
+  </section>
+{% endif %}
+{% endblock %}

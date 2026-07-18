@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set title = "编辑题目" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">#{{ q|question_no }}</p>
+    <h1>重新编辑题目</h1>
+  </div>
+  <a class="button subtle" href="{{ request.args.get('next') or url_for('history_day', day=q.created_at[:10]) }}">返回</a>
+</section>
+
+<form class="editor" action="{{ url_for('edit_question', question_id=q.id) }}" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="next" value="{{ request.args.get('next') or url_for('history_day', day=q.created_at[:10]) }}">
+  <div class="form-grid">
+    <label>
+      <span>题号</span>
+      <input name="question_no" type="text" value="{{ q.question_no }}">
+    </label>
+    <label>
+      <span>标签</span>
+      <input name="tags" type="text" value="{{ q.tags }}">
+    </label>
+    <label class="wide">
+      <span>题目</span>
+      <textarea name="question" rows="8" required>{{ q.question }}</textarea>
+    </label>
+    <label class="wide">
+      <span>当前题目图片</span>
+      <div class="image-preview-row">
+        {% for image in q.question_image|image_refs %}
+          <img class="attachment tiny" src="{{ image|image_src }}" alt="题目图片">
+        {% else %}
+          <span class="placeholder">暂无图片</span>
+        {% endfor %}
+      </div>
+    </label>
+    <label>
+      <span>替换题目图片</span>
+      <input type="file" name="question_image" accept="image/*">
+    </label>
+
+    <label>
+      <span>选项 A</span>
+      <textarea name="option_a" rows="3" required>{{ q.option_a }}</textarea>
+    </label>
+    <label>
+      <span>选项 B</span>
+      <textarea name="option_b" rows="3" required>{{ q.option_b }}</textarea>
+    </label>
+    <label>
+      <span>选项 C</span>
+      <textarea name="option_c" rows="3" required>{{ q.option_c }}</textarea>
+    </label>
+    <label>
+      <span>选项 D</span>
+      <textarea name="option_d" rows="3" required>{{ q.option_d }}</textarea>
+    </label>
+
+    <label>
+      <span>答案</span>
+      <select name="answer" required>
+        {% for key in ["A", "B", "C", "D"] %}
+          <option value="{{ key }}" {% if q.answer == key %}selected{% endif %}>{{ key }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="wide">
+      <span>解析（支持 Markdown）</span>
+      <textarea name="explanation" rows="8" required>{{ q.explanation }}</textarea>
+    </label>
+    <label>
+      <span>替换解析图片</span>
+      <input type="file" name="explanation_image" accept="image/*">
+    </label>
+  </div>
+
+  <div class="actions">
+    <button class="button primary" type="submit">保存修改</button>
+  </div>
+</form>
+{% endblock %}

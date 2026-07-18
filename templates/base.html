@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "题目记录" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">题目记录</a>
+    <nav>
+      <a href="{{ url_for('index') }}">录入</a>
+      <a href="{{ url_for('today') }}">今日</a>
+      <a href="{{ url_for('history') }}">历史</a>
+      <a class="import-link" href="{{ url_for('import_json') }}">从Json 导入</a>
+      <a class="export-link js-export-anki" href="{{ url_for('export_today') }}">导出今日 Anki</a>
+    </nav>
+  </header>
+
+  <main class="shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="messages">
+          {% for category, message in messages %}
+            <div class="message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    document.querySelectorAll(".js-export-anki").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        const deckName = prompt("请输入 Anki 包/牌组名", link.dataset.defaultDeck || "");
+        if (deckName === null) {
+          event.preventDefault();
+          return;
+        }
+        if (deckName.trim()) {
+          const url = new URL(link.href, window.location.href);
+          url.searchParams.set("deck_name", deckName.trim());
+          link.href = url.toString();
+        }
+      });
+    });
+    document.querySelectorAll(".js-export-form").forEach((form) => {
+      form.addEventListener("submit", (event) => {
+        const deckName = prompt("请输入 Anki 包/牌组名", form.dataset.defaultDeck || "");
+        if (deckName === null) {
+          event.preventDefault();
+          return;
+        }
+        const field = form.querySelector('input[name="deck_name"]');
+        if (field) field.value = deckName.trim();
+      });
+    });
+  </script>
+</body>
+</html>

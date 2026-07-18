@@ -1,0 +1,34 @@
+<article class="question-card">
+  <div class="question-meta">
+    {% set display_no = display_no|default(q.id) %}
+    <span>#{{ display_no }}</span>
+    <time>{{ q.created_at[11:16] }}</time>
+    {% if q.tags %}
+      <span class="tag-line">{{ q.tags }}</span>
+    {% endif %}
+    <div class="card-actions">
+      <a class="small-button" href="{{ url_for('edit_question', question_id=q.id, next=request.path) }}">编辑</a>
+      <form class="delete-form" action="{{ url_for('delete_question', question_id=q.id) }}" method="post">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button class="delete-button" type="submit" onclick="return confirm('确定删除第 {{ display_no }} 题吗？')">删除</button>
+      </form>
+    </div>
+  </div>
+  {% for image in q.question_image|image_refs %}
+    <img class="attachment" src="{{ image|image_src }}" alt="题目图片">
+  {% endfor %}
+  <div class="rendered">{{ q.question|md|safe }}</div>
+  <div class="options">
+    <div><b>A</b><span>{{ q.option_a|md|safe }}</span></div>
+    <div><b>B</b><span>{{ q.option_b|md|safe }}</span></div>
+    <div><b>C</b><span>{{ q.option_c|md|safe }}</span></div>
+    <div><b>D</b><span>{{ q.option_d|md|safe }}</span></div>
+  </div>
+  <details>
+    <summary>解析{% if q.answer %} · 答案 {{ q.answer }}{% endif %}</summary>
+    <div class="rendered">{{ q.explanation|md|safe }}</div>
+    {% for image in q.explanation_image|image_refs %}
+      <img class="attachment" src="{{ image|image_src }}" alt="解析图片">
+    {% endfor %}
+  </details>
+</article>

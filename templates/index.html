@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% set title = "录入题目" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ today|day_label }}</p>
+    <h1>录入题目</h1>
+  </div>
+  <a class="button subtle" href="{{ url_for('today') }}">查看今天</a>
+</section>
+
+<form class="editor" action="{{ url_for('create_question') }}" method="post" enctype="multipart/form-data">
+  <div class="editor-layout">
+    <div class="form-grid">
+      <label>
+        <span>题号</span>
+        <input name="question_no" data-preview-source="question_no" type="text" placeholder="例如：1、4、2024-3">
+      </label>
+      <label>
+        <span>标签</span>
+        <input name="tags" data-preview-source="tags" type="text" placeholder="函数 导数 易错">
+      </label>
+      <label class="wide">
+        <span>题目</span>
+        <textarea name="question" data-preview-source="question" rows="8" placeholder="支持 Markdown 和 LaTeX，例如：若 $x^2=4$，求 x。" required></textarea>
+      </label>
+      <label>
+        <span>题目图片</span>
+        <input type="file" name="question_image" accept="image/*" data-preview-image-source="question_image">
+      </label>
+
+      <label>
+        <span>选项 A</span>
+        <textarea name="option_a" data-preview-source="option_a" rows="3" required></textarea>
+      </label>
+      <label>
+        <span>选项 B</span>
+        <textarea name="option_b" data-preview-source="option_b" rows="3" required></textarea>
+      </label>
+      <label>
+        <span>选项 C</span>
+        <textarea name="option_c" data-preview-source="option_c" rows="3" required></textarea>
+      </label>
+      <label>
+        <span>选项 D</span>
+        <textarea name="option_d" data-preview-source="option_d" rows="3" required></textarea>
+      </label>
+
+      <label>
+        <span>答案</span>
+        <select name="answer" data-preview-source="answer" required>
+          <option value="">请选择</option>
+          <option>A</option>
+          <option>B</option>
+          <option>C</option>
+          <option>D</option>
+        </select>
+      </label>
+      <label class="wide">
+        <span>解析</span>
+        <textarea name="explanation" data-preview-source="explanation" rows="7" placeholder="支持 Markdown 和 LaTeX，可写推导、易错点、结论。" required></textarea>
+      </label>
+      <label>
+        <span>解析图片</span>
+        <input type="file" name="explanation_image" accept="image/*" data-preview-image-source="explanation_image">
+      </label>
+    </div>
+
+    <aside class="live-preview" aria-live="polite">
+      <div class="preview-head">
+        <span>实时预览</span>
+        <small>Markdown / LaTeX</small>
+      </div>
+      <article class="question-card preview-card">
+        <div class="question-meta">
+          <span data-preview-output="question_no">#预览</span>
+          <span data-preview-output="tags"></span>
+        </div>
+        <div class="preview-images" data-preview-image-output="question_image"></div>
+        <div class="rendered" data-preview-output="question"></div>
+        <div class="options">
+          <div><b>A</b><span data-preview-output="option_a"></span></div>
+          <div><b>B</b><span data-preview-output="option_b"></span></div>
+          <div><b>C</b><span data-preview-output="option_c"></span></div>
+          <div><b>D</b><span data-preview-output="option_d"></span></div>
+        </div>
+        <details open>
+          <summary>解析 <span data-preview-output="answer"></span></summary>
+          <div class="rendered" data-preview-output="explanation"></div>
+          <div class="preview-images" data-preview-image-output="explanation_image"></div>
+        </details>
+      </article>
+    </aside>
+  </div>
+
+  <div class="actions">
+    <button class="button primary" type="submit">保存题目</button>
+  </div>
+</form>
+
+{% if recent %}
+<section class="recent">
+  <div class="section-title">
+    <h2>今天刚记录</h2>
+    <a href="{{ url_for('today') }}">全部</a>
+  </div>
+  <div class="question-list compact">
+    {% for q in recent %}
+      {% set display_no = loop.index %}
+      {% include "_question_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<script>
+  const escapeHtml = (value) => value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+  const inlineMarkdown = (value) => escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+  const renderMarkdown = (value) => {
+    const lines = value.replace(/\r\n/g, "\n").split("\n");
+    const parts = [];
+    let inList = false;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) {
+        if (inList) {
+          parts.push("</ul>");
+          inList = false;
+        }
+        continue;
+      }
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      const bullet = line.match(/^[-*]\s+(.+)$/);
+      if (heading) {
+        if (inList) {
+          parts.push("</ul>");
+          inList = false;
+        }
+        const level = heading[1].length;
+        parts.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      } else if (bullet) {
+        if (!inList) {
+          parts.push("<ul>");
+          inList = true;
+        }
+        parts.push(`<li>${inlineMarkdown(bullet[1])}</li>`);
+      } else {
+        if (inList) {
+          parts.push("</ul>");
+          inList = false;
+        }
+        parts.push(`<p>${inlineMarkdown(line)}</p>`);
+      }
+    }
+    if (inList) parts.push("</ul>");
+    return parts.join("");
+  };
+
+  const previewImageUrls = new Map();
+
+  const updateImagePreview = (field) => {
+    const key = field.dataset.previewImageSource;
+    const target = document.querySelector(`[data-preview-image-output="${key}"]`);
+    if (!target) return;
+
+    const previousUrl = previewImageUrls.get(key);
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+
+    target.innerHTML = "";
+    const file = field.files?.[0];
+    if (!file) {
+      previewImageUrls.delete(key);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    previewImageUrls.set(key, url);
+    const img = document.createElement("img");
+    img.className = "attachment";
+    img.src = url;
+    img.alt = field.name === "question_image" ? "题目图片预览" : "解析图片预览";
+    target.appendChild(img);
+  };
+
+  const updatePreview = () => {
+    const values = {};
+    document.querySelectorAll("[data-preview-source]").forEach((field) => {
+      values[field.dataset.previewSource] = field.value || "";
+    });
+    for (const key of ["question", "option_a", "option_b", "option_c", "option_d", "explanation"]) {
+      const target = document.querySelector(`[data-preview-output="${key}"]`);
+      if (target) target.innerHTML = values[key] ? renderMarkdown(values[key]) : "<p class='placeholder'>等待输入</p>";
+    }
+    document.querySelector('[data-preview-output="answer"]').textContent = values.answer ? `· 答案 ${values.answer}` : "";
+    document.querySelector('[data-preview-output="tags"]').textContent = values.tags || "";
+    document.querySelector('[data-preview-output="question_no"]').textContent = values.question_no ? `#${values.question_no}` : "#预览";
+    if (window.MathJax?.typesetPromise) {
+      window.MathJax.typesetPromise([document.querySelector(".live-preview")]);
+    }
+  };
+
+  document.querySelectorAll("[data-preview-source]").forEach((field) => {
+    field.addEventListener("input", updatePreview);
+    field.addEventListener("change", updatePreview);
+  });
+  document.querySelectorAll("[data-preview-image-source]").forEach((field) => {
+    field.addEventListener("change", () => updateImagePreview(field));
+  });
+  updatePreview();
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set title = "历史记录" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">History</p>
+    <h1>按天查看历史题目</h1>
+  </div>
+  <a class="button subtle" href="{{ url_for('index') }}">继续录入</a>
+</section>
+
+{% if days %}
+  <div class="history-grid">
+    {% for item in days %}
+      <a class="day-card" href="{{ url_for('history_day', day=item.day) }}">
+        <span>{{ item.day|day_label }}</span>
+        <strong>{{ item.count }} 道题</strong>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <section class="empty">
+    <h2>暂无历史</h2>
+    <p>开始记录题目后，会按日期自动归档。</p>
+    <a class="button primary" href="{{ url_for('index') }}">录入第一题</a>
+  </section>
+{% endif %}
+{% endblock %}
