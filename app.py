@@ -25,6 +25,27 @@ DB_PATH = DATA_DIR / "questions.sqlite3"
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 OPTION_KEYS = ("A", "B", "C", "D")
 IMAGE_REF_SEPARATOR = "\n"
+LATEX_COMMANDS = (
+    "frac",
+    "times",
+    "right",
+    "left",
+    "cdot",
+    "sqrt",
+    "leq",
+    "geq",
+    "neq",
+    "div",
+    "infty",
+    "pi",
+    "theta",
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "begin",
+    "end",
+)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "local-dev-question-bank")
@@ -61,7 +82,9 @@ def init_db():
                 explanation TEXT NOT NULL,
                 tags TEXT NOT NULL DEFAULT '',
                 question_image TEXT,
+                question_image_position TEXT NOT NULL DEFAULT 'before',
                 explanation_image TEXT,
+                source TEXT NOT NULL DEFAULT 'manual',
                 created_at TEXT NOT NULL
             )
             """
@@ -69,6 +92,12 @@ def init_db():
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(questions)").fetchall()}
         if "question_no" not in columns:
             conn.execute("ALTER TABLE questions ADD COLUMN question_no TEXT NOT NULL DEFAULT ''")
+        if "source" not in columns:
+            conn.execute("ALTER TABLE questions ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+        if "question_image_position" not in columns:
+            conn.execute(
+                "ALTER TABLE questions ADD COLUMN question_image_position TEXT NOT NULL DEFAULT 'before'"
+            )
         conn.commit()
 
 
@@ -95,8 +124,7 @@ def allowed_image(filename):
     return Path(filename).suffix.lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
-def save_upload(field_name):
-    file = request.files.get(field_name)
+def save_uploaded_file(file):
     if not file or not file.filename:
         return None
     if not allowed_image(file.filename):
@@ -106,6 +134,10 @@ def save_upload(field_name):
     filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{suffix}"
     file.save(UPLOAD_DIR / filename)
     return filename
+
+
+def save_upload(field_name):
+    return save_uploaded_file(request.files.get(field_name))
 
 
 def is_remote_image(value):
@@ -122,6 +154,14 @@ def image_refs(value):
     return [part.strip() for part in str(value).split(IMAGE_REF_SEPARATOR) if part.strip()]
 
 
+def import_image_refs(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
 def question_display_no(question):
     return question["question_no"] if "question_no" in question.keys() and question["question_no"] else question["id"]
 
@@ -135,26 +175,62 @@ def normalize_tags(tags):
     return " ".join(part for part in parts if part)
 
 
-def fetch_questions(day=None):
+def protect_latex_backslashes(raw_text):
+    command_pattern = "|".join(re.escape(command) for command in LATEX_COMMANDS)
+    return re.sub(rf"(?<!\\)\\(?=({command_pattern})\b)", r"\\\\", raw_text)
+
+
+def repair_latex_escapes(value):
+    if isinstance(value, str):
+        replacements = {
+            "\x0crac": r"\frac",
+            "\times": r"\times",
+            "\right": r"\right",
+            "\b": r"\b",
+        }
+        for broken, fixed in replacements.items():
+            value = value.replace(broken, fixed)
+        return value
+    if isinstance(value, list):
+        return [repair_latex_escapes(item) for item in value]
+    if isinstance(value, dict):
+        return {key: repair_latex_escapes(item) for key, item in value.items()}
+    return value
+
+
+def load_import_json(file_storage):
+    raw_text = file_storage.read().decode("utf-8-sig")
+    try:
+        return repair_latex_escapes(json.loads(protect_latex_backslashes(raw_text)))
+    except json.JSONDecodeError:
+        return repair_latex_escapes(json.loads(raw_text))
+
+
+def fetch_questions(day=None, source="manual"):
     with get_db() as conn:
         if day:
             rows = conn.execute(
-                "SELECT * FROM questions WHERE date(created_at) = ? ORDER BY id DESC", (day,)
+                "SELECT * FROM questions WHERE date(created_at) = ? AND source = ? ORDER BY id DESC",
+                (day, source),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM questions ORDER BY id DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM questions WHERE source = ? ORDER BY id DESC", (source,)
+            ).fetchall()
     return rows
 
 
-def fetch_days():
+def fetch_days(source="manual"):
     with get_db() as conn:
         return conn.execute(
             """
             SELECT date(created_at) AS day, COUNT(*) AS count
             FROM questions
+            WHERE source = ?
             GROUP BY day
             ORDER BY day DESC
-            """
+            """,
+            (source,),
         ).fetchall()
 
 
@@ -237,6 +313,11 @@ def image_refs_filter(value):
     return image_refs(value)
 
 
+@app.template_filter("import_image_refs")
+def import_image_refs_filter(value):
+    return import_image_refs(value)
+
+
 @app.template_filter("image_src")
 def image_src(value):
     return value if is_remote_image(value) else url_for("uploaded_file", filename=value)
@@ -274,8 +355,8 @@ def create_question():
             """
             INSERT INTO questions (
                 question_no, question, option_a, option_b, option_c, option_d, answer,
-                explanation, tags, question_image, explanation_image, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                explanation, tags, question_image, explanation_image, source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 form.get("question_no", "").strip(),
@@ -289,6 +370,7 @@ def create_question():
                 normalize_tags(form.get("tags", "")),
                 question_image,
                 explanation_image,
+                "manual",
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
@@ -314,10 +396,10 @@ def edit_question(question_id):
         return redirect(url_for("edit_question", question_id=question_id))
 
     form = request.form
-    required = ["question", "option_a", "option_b", "option_c", "option_d", "answer", "explanation"]
+    required = ["question", "option_a", "option_b", "option_c", "option_d", "explanation"]
     missing = [field for field in required if not form.get(field, "").strip()]
     if missing:
-        flash("题目、ABCD 选项、答案和解析都需要填写", "error")
+        flash("题目、ABCD 选项和解析都需要填写", "error")
         return redirect(url_for("edit_question", question_id=question_id))
 
     with get_db() as conn:
@@ -371,7 +453,7 @@ def today():
 
 @app.route("/history")
 def history():
-    return render_template("history.html", days=fetch_days())
+    return render_template("history.html", days=fetch_days(), json_days=fetch_days("json"))
 
 
 @app.route("/history/<day>")
@@ -384,6 +466,16 @@ def history_day(day):
     return render_template("day.html", questions=questions, day=day, is_today=(day == today_string()))
 
 
+@app.route("/history/json/<day>")
+def json_history_day(day):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        abort(404)
+    questions = fetch_questions(day, "json")
+    return render_template("day.html", questions=questions, day=day, is_today=False, is_json=True)
+
+
 @app.route("/import-json", methods=["GET", "POST"])
 def import_json():
     if request.method == "GET":
@@ -392,7 +484,7 @@ def import_json():
     import_file = request.files.get("json_file")
     if import_file and import_file.filename:
         try:
-            payload = json.loads(import_file.read().decode("utf-8-sig"))
+            payload = load_import_json(import_file)
         except (UnicodeDecodeError, json.JSONDecodeError):
             flash("JSON 文件读取失败，请确认格式正确", "error")
             return redirect(url_for("import_json"))
@@ -407,6 +499,15 @@ def import_json():
         return redirect(url_for("import_json"))
 
     explanations = request.form.getlist("explanation")
+    question_nos = request.form.getlist("question_no")
+    imported_tags = request.form.getlist("tags")
+    imported_questions = request.form.getlist("question")
+    option_as = request.form.getlist("option_a")
+    option_bs = request.form.getlist("option_b")
+    option_cs = request.form.getlist("option_c")
+    option_ds = request.form.getlist("option_d")
+    answers = request.form.getlist("answer")
+    question_image_positions = request.form.getlist("question_image_position")
     questions = []
     created_at = datetime.now().isoformat(timespec="seconds")
     for index, raw_item in enumerate(raw_items):
@@ -417,29 +518,81 @@ def import_json():
         images = item.get("图片") or []
         if isinstance(images, str):
             images = [images]
-        answer = str(item.get("答案", "")).strip().upper()
+        answer = answers[index].strip().upper() if index < len(answers) else str(item.get("答案", "")).strip().upper()
         if answer not in OPTION_KEYS:
             answer = ""
+        image_position = (
+            question_image_positions[index].strip().lower()
+            if index < len(question_image_positions)
+            else "before"
+        )
+        if image_position not in {"before", "after"}:
+            image_position = "before"
+        try:
+            uploaded_question_image = save_uploaded_file(
+                request.files.get(f"question_image_{index}")
+            )
+            uploaded_explanation_image = save_uploaded_file(
+                request.files.get(f"explanation_image_{index}")
+            )
+        except ValueError as exc:
+            flash(f"第 {index + 1} 题：{exc}", "error")
+            return redirect(url_for("import_json"))
         questions.append(
             {
                 "id": index + 1,
-                "question_no": str(item.get("题号", index + 1)).strip(),
-                "question": str(item.get("题目", "")).strip(),
-                "option_a": str(item.get("A", "")).strip(),
-                "option_b": str(item.get("B", "")).strip(),
-                "option_c": str(item.get("C", "")).strip(),
-                "option_d": str(item.get("D", "")).strip(),
+                "question_no": (question_nos[index] if index < len(question_nos) else str(item.get("题号", index + 1))).strip(),
+                "question": (imported_questions[index] if index < len(imported_questions) else str(item.get("题目", ""))).strip(),
+                "option_a": (option_as[index] if index < len(option_as) else str(item.get("A", ""))).strip(),
+                "option_b": (option_bs[index] if index < len(option_bs) else str(item.get("B", ""))).strip(),
+                "option_c": (option_cs[index] if index < len(option_cs) else str(item.get("C", ""))).strip(),
+                "option_d": (option_ds[index] if index < len(option_ds) else str(item.get("D", ""))).strip(),
                 "answer": answer,
                 "explanation": explanations[index].strip() if index < len(explanations) else "",
-                "tags": normalize_tags(str(item.get("标签", ""))),
-                "question_image": pack_image_refs([str(value) for value in images]),
-                "explanation_image": None,
+                "tags": normalize_tags(imported_tags[index] if index < len(imported_tags) else str(item.get("标签", ""))),
+                "question_image": pack_image_refs(
+                    [str(value) for value in images] + [uploaded_question_image]
+                ),
+                "question_image_position": image_position,
+                "explanation_image": uploaded_explanation_image,
+                "source": "json",
                 "created_at": created_at,
             }
         )
     if not questions:
         flash("没有可导出的题目", "error")
         return redirect(url_for("import_json"))
+    with get_db() as conn:
+        conn.executemany(
+            """
+            INSERT INTO questions (
+                question_no, question, option_a, option_b, option_c, option_d, answer,
+                explanation, tags, question_image, question_image_position,
+                explanation_image, source, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    question["question_no"],
+                    question["question"],
+                    question["option_a"],
+                    question["option_b"],
+                    question["option_c"],
+                    question["option_d"],
+                    question["answer"],
+                    question["explanation"],
+                    question["tags"],
+                    question["question_image"],
+                    question["question_image_position"],
+                    question["explanation_image"],
+                    question["source"],
+                    question["created_at"],
+                )
+                for question in questions
+            ],
+        )
+        conn.commit()
+    flash(f"已导入 {len(questions)} 道 JSON 题目，可在历史页继续编辑", "success")
     path = build_apkg(today_string(), questions, request.form.get("deck_name"))
     return send_file(path, as_attachment=True, download_name=path.name)
 
@@ -474,6 +627,20 @@ def export_day(day):
     return send_file(path, as_attachment=True, download_name=path.name)
 
 
+@app.route("/exports/json/<day>")
+def export_json_day(day):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        abort(404)
+    questions = fetch_questions(day, "json")
+    if not questions:
+        flash("这一天还没有 JSON 导入题目，无法导出 Anki 包", "error")
+        return redirect(url_for("json_history_day", day=day))
+    path = build_apkg(day, questions, request.args.get("deck_name") or f"JSON导入题目::{display_day(day)}")
+    return send_file(path, as_attachment=True, download_name=path.name)
+
+
 def field_html(label, value):
     return f"<section><h3>{html.escape(label)}</h3>{anki_markdown_to_html(value)}</section>"
 
@@ -494,11 +661,12 @@ def option_html(key, value, answer):
 
 def build_front(question):
     answer = (question["answer"] or "").strip().upper()
-    parts = [
-        image_html(question["question_image"]),
-        field_html("题目", question["question"]),
-        "<div class='choices'>",
-    ]
+    question_content = field_html("题目", question["question"])
+    question_images = image_html(question["question_image"])
+    if question_value(question, "question_image_position", "before") == "after":
+        parts = [question_content, question_images, "<div class='choices'>"]
+    else:
+        parts = [question_images, question_content, "<div class='choices'>"]
     for key in OPTION_KEYS:
         value = question[f"option_{key.lower()}"]
         parts.append(option_html(key, value, answer))

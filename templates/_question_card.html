@@ -14,10 +14,17 @@
       </form>
     </div>
   </div>
-  {% for image in q.question_image|image_refs %}
-    <img class="attachment" src="{{ image|image_src }}" alt="题目图片">
-  {% endfor %}
+  {% if q.question_image_position != "after" %}
+    {% for image in q.question_image|image_refs %}
+      <img class="attachment" src="{{ image|image_src }}" alt="题目图片">
+    {% endfor %}
+  {% endif %}
   <div class="rendered">{{ q.question|md|safe }}</div>
+  {% if q.question_image_position == "after" %}
+    {% for image in q.question_image|image_refs %}
+      <img class="attachment" src="{{ image|image_src }}" alt="题目图片">
+    {% endfor %}
+  {% endif %}
   <div class="options">
     <div><b>A</b><span>{{ q.option_a|md|safe }}</span></div>
     <div><b>B</b><span>{{ q.option_b|md|safe }}</span></div>

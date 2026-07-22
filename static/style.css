@@ -453,6 +453,19 @@ summary {
   font-size: 24px;
 }
 
+.history-section-title {
+  margin: 30px 0 14px;
+}
+
+.json-card {
+  border-color: rgba(37, 99, 235, 0.22);
+}
+
+.compact-empty {
+  padding: 20px;
+  box-shadow: none;
+}
+
 .empty {
   display: grid;
   gap: 12px;
@@ -477,6 +490,25 @@ summary {
 .import-card {
   display: grid;
   gap: 12px;
+}
+
+.import-card-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.import-preview {
+  position: sticky;
+  top: 86px;
+  display: grid;
+  gap: 12px;
+}
+
+.image-position-button {
+  justify-self: start;
+  cursor: pointer;
 }
 
 .answer-line {
@@ -555,6 +587,7 @@ code {
   }
 
   .editor-layout,
+  .import-card-layout,
   .form-grid,
   .question-list.compact,
   .options {

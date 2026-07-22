@@ -59,7 +59,8 @@
 
     <label>
       <span>答案</span>
-      <select name="answer" required>
+      <select name="answer">
+        <option value="" {% if not q.answer %}selected{% endif %}>未标注</option>
         {% for key in ["A", "B", "C", "D"] %}
           <option value="{{ key }}" {% if q.answer == key %}selected{% endif %}>{{ key }}</option>
         {% endfor %}

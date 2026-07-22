@@ -8,7 +8,11 @@
     <h1>{{ "今天记录的题目" if is_today else "历史题目" }}</h1>
   </div>
   <div class="head-actions">
-    <a class="button primary js-export-anki" href="{{ url_for('export_day', day=day) }}" data-default-deck="数量关系题目::{{ day|day_label }}">导出 Anki 包</a>
+    {% if is_json|default(false) %}
+      <a class="button primary js-export-anki" href="{{ url_for('export_json_day', day=day) }}" data-default-deck="JSON导入题目::{{ day|day_label }}">导出 Anki 包</a>
+    {% else %}
+      <a class="button primary js-export-anki" href="{{ url_for('export_day', day=day) }}" data-default-deck="数量关系题目::{{ day|day_label }}">导出 Anki 包</a>
+    {% endif %}
     {% if not is_today %}
       <a class="button subtle" href="{{ url_for('history') }}">返回历史</a>
     {% endif %}
@@ -18,7 +22,7 @@
 {% if questions %}
   <div class="count-bar">
     <span>共 {{ questions|length }} 道题</span>
-    <span>导出默认牌组名：{{ day|day_label }}</span>
+    <span>导出默认牌组名：{{ "JSON导入题目::" if is_json|default(false) else "" }}{{ day|day_label }}</span>
   </div>
   <div class="question-list">
     {% for q in questions %}

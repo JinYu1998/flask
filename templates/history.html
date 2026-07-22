@@ -26,4 +26,27 @@
     <a class="button primary" href="{{ url_for('index') }}">录入第一题</a>
   </section>
 {% endif %}
+
+<section class="section-title history-section-title">
+  <div>
+    <p class="eyebrow">JSON History</p>
+    <h2>JSON 导入历史</h2>
+  </div>
+</section>
+
+{% if json_days %}
+  <div class="history-grid">
+    {% for item in json_days %}
+      <a class="day-card json-card" href="{{ url_for('json_history_day', day=item.day) }}">
+        <span>{{ item.day|day_label }}</span>
+        <strong>{{ item.count }} 道 JSON 题</strong>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <section class="empty compact-empty">
+    <h2>暂无 JSON 导入历史</h2>
+    <p>从 JSON 导入并导出后，这里会保留可再次编辑的题目。</p>
+  </section>
+{% endif %}
 {% endblock %}

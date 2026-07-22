@@ -21,7 +21,7 @@
     </div>
   </form>
 {% else %}
-  <form class="import-list js-export-form" action="{{ url_for('import_json') }}" method="post" data-default-deck="JSON导入题目">
+  <form class="import-list js-export-form" action="{{ url_for('import_json') }}" method="post" enctype="multipart/form-data" data-default-deck="JSON导入题目">
     <input type="hidden" name="deck_name" value="">
     {% for item in imported %}
       <article class="question-card import-card">
@@ -31,21 +31,93 @@
             <span class="tag-line">{{ item.get("标签") }}</span>
           {% endif %}
         </div>
-        {% for image in item.get("图片", []) %}
-          <img class="attachment" src="{{ image }}" alt="题目图片">
-        {% endfor %}
-        <div class="rendered">{{ item.get("题目", "")|md|safe }}</div>
-        <div class="options">
-          <div><b>A</b><span>{{ item.get("A", "")|md|safe }}</span></div>
-          <div><b>B</b><span>{{ item.get("B", "")|md|safe }}</span></div>
-          <div><b>C</b><span>{{ item.get("C", "")|md|safe }}</span></div>
-          <div><b>D</b><span>{{ item.get("D", "")|md|safe }}</span></div>
+        <div class="import-card-layout">
+          <div class="import-editor form-grid">
+          <label>
+            <span>题号</span>
+            <input name="question_no" type="text" value="{{ item.get("题号", loop.index) }}">
+          </label>
+          <label>
+            <span>标签</span>
+            <input name="tags" type="text" value="{{ item.get("标签", "") }}">
+          </label>
+          <label class="wide">
+            <span>题目</span>
+            <textarea name="question" data-preview-field="question" rows="5" required>{{ item.get("题目", "") }}</textarea>
+          </label>
+          <label class="wide">
+            <span>题目图片</span>
+            <div class="image-preview-row">
+              {% for image in item.get("图片")|import_image_refs %}
+                <img class="attachment tiny" src="{{ image }}" alt="JSON 题目图片">
+              {% else %}
+                <span class="placeholder">JSON 中暂无图片</span>
+              {% endfor %}
+            </div>
+            <input type="file" name="question_image_{{ loop.index0 }}" accept="image/*" data-preview-image="question_image">
+            <input type="hidden" name="question_image_position" value="before" data-image-position>
+            <button class="small-button image-position-button" type="button" data-toggle-image-position>
+              图片在题目前（点击下移）
+            </button>
+          </label>
+          <label>
+            <span>选项 A</span>
+            <textarea name="option_a" data-preview-field="option_a" rows="2" required>{{ item.get("A", "") }}</textarea>
+          </label>
+          <label>
+            <span>选项 B</span>
+            <textarea name="option_b" data-preview-field="option_b" rows="2" required>{{ item.get("B", "") }}</textarea>
+          </label>
+          <label>
+            <span>选项 C</span>
+            <textarea name="option_c" data-preview-field="option_c" rows="2" required>{{ item.get("C", "") }}</textarea>
+          </label>
+          <label>
+            <span>选项 D</span>
+            <textarea name="option_d" data-preview-field="option_d" rows="2" required>{{ item.get("D", "") }}</textarea>
+          </label>
+          <label>
+            <span>答案</span>
+            <select name="answer" data-preview-field="answer">
+              <option value="">未标注</option>
+              {% for key in ["A", "B", "C", "D"] %}
+                <option value="{{ key }}" {% if item.get("答案", "") == key %}selected{% endif %}>{{ key }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="wide">
+            <span>手写解析（支持 Markdown）</span>
+            <textarea name="explanation" data-preview-field="explanation" rows="6" placeholder="在这里写解析、公式、易错点……" required></textarea>
+          </label>
+          <label class="wide">
+            <span>解析图片</span>
+            <input type="file" name="explanation_image_{{ loop.index0 }}" accept="image/*" data-preview-image="explanation_image">
+          </label>
+          </div>
+
+          <aside class="import-preview" aria-live="polite">
+            <div class="preview-head"><span>实时预览</span><small>Markdown / LaTeX</small></div>
+            <article class="question-card preview-card">
+              <div class="preview-images" data-preview-images="question_image">
+                {% for image in item.get("图片")|import_image_refs %}
+                  <img class="attachment" src="{{ image }}" alt="题目图片预览">
+                {% endfor %}
+              </div>
+              <div class="rendered" data-preview-value="question"></div>
+              <div class="options">
+                <div><b>A</b><span data-preview-value="option_a"></span></div>
+                <div><b>B</b><span data-preview-value="option_b"></span></div>
+                <div><b>C</b><span data-preview-value="option_c"></span></div>
+                <div><b>D</b><span data-preview-value="option_d"></span></div>
+              </div>
+              <details open>
+                <summary>解析 <span data-preview-value="answer"></span></summary>
+                <div class="rendered" data-preview-value="explanation"></div>
+                <div class="preview-images" data-preview-images="explanation_image"></div>
+              </details>
+            </article>
+          </aside>
         </div>
-        <p class="answer-line">答案：{{ item.get("答案", "未标注") }}</p>
-        <label class="wide">
-          <span>手写解析（支持 Markdown）</span>
-          <textarea name="explanation" rows="6" placeholder="在这里写解析、公式、易错点……" required></textarea>
-        </label>
         <input type="hidden" name="item_json" value='{{ item|tojson }}'>
       </article>
     {% endfor %}
@@ -54,5 +126,91 @@
       <button class="button primary" type="submit">导出 Anki 包</button>
     </div>
   </form>
+{% endif %}
+
+{% if imported %}
+<script>
+  const escapeImportHtml = (value) => value
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+  const renderImportMarkdown = (value) => {
+    const lines = value.replace(/\r\n/g, "\n").split("\n");
+    const output = [];
+    let inList = false;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) { if (inList) output.push("</ul>"); inList = false; continue; }
+      const text = escapeImportHtml(line)
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      const heading = text.match(/^(#{1,3})\s+(.+)$/);
+      const bullet = text.match(/^[-*]\s+(.+)$/);
+      if (heading) {
+        if (inList) output.push("</ul>"); inList = false;
+        output.push(`<h${heading[1].length}>${heading[2]}</h${heading[1].length}>`);
+      } else if (bullet) {
+        if (!inList) output.push("<ul>"); inList = true;
+        output.push(`<li>${bullet[1]}</li>`);
+      } else {
+        if (inList) output.push("</ul>"); inList = false;
+        output.push(`<p>${text}</p>`);
+      }
+    }
+    if (inList) output.push("</ul>");
+    return output.join("");
+  };
+
+  document.querySelectorAll(".import-card").forEach((card) => {
+    const update = () => {
+      card.querySelectorAll("[data-preview-field]").forEach((field) => {
+        const key = field.dataset.previewField;
+        const target = card.querySelector(`[data-preview-value="${key}"]`);
+        if (!target) return;
+        target.innerHTML = key === "answer"
+          ? (field.value ? `· 答案 ${escapeImportHtml(field.value)}` : "")
+          : (field.value ? renderImportMarkdown(field.value) : "<p class='placeholder'>等待输入</p>");
+      });
+      if (window.MathJax?.typesetPromise) window.MathJax.typesetPromise([card.querySelector(".import-preview")]);
+    };
+    card.querySelectorAll("[data-preview-field]").forEach((field) => {
+      field.addEventListener("input", update);
+      field.addEventListener("change", update);
+    });
+    card.querySelectorAll("[data-preview-image]").forEach((field) => {
+      field.addEventListener("change", () => {
+        const target = card.querySelector(`[data-preview-images="${field.dataset.previewImage}"]`);
+        target.querySelectorAll(".local-preview").forEach((image) => image.remove());
+        const file = field.files?.[0];
+        if (!file) return;
+        const image = document.createElement("img");
+        image.className = "attachment local-preview";
+        image.src = URL.createObjectURL(file);
+        image.onload = () => URL.revokeObjectURL(image.src);
+        image.alt = "上传图片预览";
+        target.appendChild(image);
+      });
+    });
+    const positionField = card.querySelector("[data-image-position]");
+    const positionButton = card.querySelector("[data-toggle-image-position]");
+    const syncImagePosition = () => {
+      const preview = card.querySelector(".preview-card");
+      const images = card.querySelector('[data-preview-images="question_image"]');
+      const question = card.querySelector('[data-preview-value="question"]');
+      if (positionField.value === "after") {
+        question.after(images);
+        positionButton.textContent = "图片在题目后（点击上移）";
+      } else {
+        preview.insertBefore(images, question);
+        positionButton.textContent = "图片在题目前（点击下移）";
+      }
+    };
+    positionButton.addEventListener("click", () => {
+      positionField.value = positionField.value === "before" ? "after" : "before";
+      syncImagePosition();
+    });
+    syncImagePosition();
+    update();
+  });
+</script>
 {% endif %}
 {% endblock %}
